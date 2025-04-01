@@ -3,199 +3,96 @@
   <head>
     <title>صيدليتي</title>
     <style>
-      body {
-        font-family: Arial, sans-serif;
-        max-width: 600px;
-        margin: 20px auto;
-        text-align: center;
-      }
-      input {
-        padding: 10px;
-        width: 300px;
-        margin: 5px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-      }
-      button {
-        background: #4caf50;
-        color: white;
-        padding: 10px;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-      }
-      button:disabled {
-        background: #ccc;
-        cursor: not-allowed;
-      }
-      .result {
-        background: #f5f5f5;
-        padding: 10px;
-        margin: 10px 0;
-        border-radius: 8px;
-      }
-      .loading {
-        color: #4caf50;
-        margin-top: 10px;
-      }
-      .error {
-        color: red;
-        margin-top: 10px;
-      }
+      body{font-family:Arial,sans-serif;margin:20px auto;text-align:center;width:100%;max-width:600px}
+      input{padding:10px;width:300px;margin:5px;border:1px solid #ccc;border-radius:5px}
+      button{background:#4caf50;color:white;padding:10px;border:none;border-radius:5px;cursor:pointer}
+      button:disabled{background:#ccc;cursor:not-allowed}
+      .result{background:#f5f5f5;padding:10px;margin:10px 0;border-radius:8px}
+      .loading{color:#4caf50;margin-top:10px}
+      .error{color:red;margin-top:10px}
+      .suggestions{text-align:right;background:#fff;border:1px solid #ccc;border-radius:5px;max-height:150px;overflow-y:auto;position:absolute;width:300px;display:none}
+      .suggestions div{padding:10px;cursor:pointer}
+      .suggestions div:hover{background:#f0f0f0}
     </style>
   </head>
   <body>
     <h1>بحث الأدوية 🔍</h1>
-    <input
-      type="text"
-      id="search"
-      placeholder="اكتب اسم الدواء"
-      oninput="toggleButton()"
-    />
-    <button id="searchBtn" onclick="searchDrugs()" disabled>بحث</button>
-    <p id="loading" class="loading" style="display: none">جاري البحث...</p>
+    <div style="position:relative;display:inline-block">
+      <input type="text" id="search" placeholder="اكتب اسم الدواء" oninput="fetchSuggestions()"/>
+      <div id="suggestions" class="suggestions"></div>
+    </div>
+    <p id="loading" class="loading" style="display:none">جاري البحث...</p>
     <p id="error" class="error"></p>
     <div id="results"></div>
-
     <h2>إضافة دواء جديد</h2>
-    <input type="text" id="addName" placeholder="اسم الدواء" />
-    <input type="text" id="addLocation" placeholder="الموقع" />
+    <input type="text" id="addName" placeholder="اسم الدواء"/>
+    <input type="text" id="addLocation" placeholder="الموقع"/>
     <button id="addBtn" onclick="addDrug()">إضافة</button>
-
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script>
-      // ✅ أدخل معلومات Supabase الصحيحة هنا
-      const SUPABASE_URL = "https://pmeuvjhbcwiehugnyupp.supabase.co";
-      const SUPABASE_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtZXV2amhiY3dpZWh1Z255dXBwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MzUzNTk1OCwiZXhwIjoyMDU5MTExOTU4fQ.OA1t-X4bhuHmgoY54kYOxhzJdfWrjBM1F0Ehcsf1WrQ"; // ضع المفتاح الصحيح هنا
-
-      const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-      function toggleButton() {
-        document.getElementById("searchBtn").disabled = !document
-          .getElementById("search")
-          .value.trim();
+      const supabase = window.supabase.createClient("https://pmeuvjhbcwiehugnyupp.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBtZXV2amhiY3dpZWh1Z255dXBwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0MzUzNTk1OCwiZXhwIjoyMDU5MTExOTU4fQ.OA1t-X4bhuHmgoY54kYOxhzJdfWrjBM1F0Ehcsf1WrQ");
+      async function fetchSuggestions() {
+        const searchText = document.getElementById("search").value.trim();
+        const suggestionsDiv = document.getElementById("suggestions");
+        if (!searchText) { suggestionsDiv.style.display = "none"; return; }
+        const { data, error } = await supabase.from("medicines").select("name").ilike("name", `%${searchText}%`).limit(5);
+        if (error || !data.length) { suggestionsDiv.style.display = "none"; return; }
+        suggestionsDiv.innerHTML = data.map(drug => `<div onclick="selectSuggestion('${drug.name}')">${drug.name}</div>`).join("");
+        suggestionsDiv.style.display = "block";
       }
-
+      function selectSuggestion(name) {
+        document.getElementById("search").value = name;
+        document.getElementById("suggestions").style.display = "none";
+        searchDrugs();
+      }
       async function searchDrugs() {
         const searchText = document.getElementById("search").value.trim();
         const resultsDiv = document.getElementById("results");
         const loadingText = document.getElementById("loading");
         const errorText = document.getElementById("error");
-
-        if (!searchText) return;
-
-        resultsDiv.innerHTML = "";
-        errorText.innerHTML = "";
-        loadingText.style.display = "block";
-
+        if (!searchText) { resultsDiv.innerHTML = ""; return; }
+        resultsDiv.innerHTML = ""; errorText.innerHTML = ""; loadingText.style.display = "block";
         try {
-          const { data, error } = await supabase
-            .from("medicines") // ✅ تأكد أن اسم الجدول مطابق في Supabase
-            .select("id, name, location")
-            .ilike("name", `%${searchText}%`);
-
+          const { data, error } = await supabase.from("medicines").select("id,name,location").ilike("name", `%${searchText}%`);
           loadingText.style.display = "none";
-
           if (error) throw error;
-
           if (!data || data.length === 0) {
-            resultsDiv.innerHTML =
-              "<p>لم يتم العثور على أي أدوية بهذا الاسم.</p>";
+            resultsDiv.innerHTML = "<p>لم يتم العثور على أي أدوية بهذا الاسم.</p>";
           } else {
-            resultsDiv.innerHTML = data
-              .map(
-                (drug) =>
-                  `<div class="result">
-                            <h3>${drug.name}</h3>
-                            <p>الموقع: ${drug.location}</p>
-                            <button onclick="removeDrug(${drug.id})">إزالة</button>
-                        </div>`
-              )
-              .join("");
+            resultsDiv.innerHTML = data.map(drug => `<div class="result"><h3>${drug.name}</h3><p>الموقع: ${drug.location}</p><button onclick="removeDrug(${drug.id})">إزالة</button></div>`).join("");
           }
-
-          // مسح الحقل بعد عرض النتائج
-          document.getElementById("search").value = "";
-
         } catch (err) {
           loadingText.style.display = "none";
           errorText.innerHTML = "❌ حدث خطأ أثناء البحث، حاول مرة أخرى.";
           console.error("خطأ في جلب البيانات:", err);
         }
       }
-
       async function addDrug() {
         const name = document.getElementById("addName").value.trim();
         const location = document.getElementById("addLocation").value.trim();
-
-        if (!name || !location) {
-          alert("يرجى ملء جميع الحقول");
-          return;
-        }
-
+        if (!name || !location) { alert("يرجى ملء جميع الحقول"); return; }
         try {
-          const { data, error } = await supabase
-            .from("medicines")
-            .insert([{ name, location }]);
-
+          const { data, error } = await supabase.from("medicines").insert([{ name, location }]);
           if (error) throw error;
-
-          alert("تم إضافة الدواء بنجاح!");
-
-          // مسح الحقول بعد إضافة الدواء
-          document.getElementById("addName").value = "";
-          document.getElementById("addLocation").value = "";
-
-          // تحديث النتائج بعد إضافة الدواء
+          document.getElementById("addName").value = ""; document.getElementById("addLocation").value = "";
+          alert("تم إضافة الدواء بنجاح");
           searchDrugs();
         } catch (err) {
-          alert("❌ فشل في إضافة الدواء، حاول مرة أخرى.");
+          alert("حدث خطأ أثناء إضافة الدواء.");
           console.error("خطأ في إضافة الدواء:", err);
         }
       }
-
-      // دالة إزالة الدواء
       async function removeDrug(id) {
-        const confirmation = confirm("هل أنت متأكد أنك تريد إزالة هذا الدواء؟");
-
-        if (!confirmation) {
-          return; // إذا لم يؤكد المستخدم الإزالة، لا نتابع العملية.
-        }
-
         try {
-          const { data, error } = await supabase
-            .from("medicines")
-            .delete()
-            .eq("id", id); // نحدد الدواء الذي نريد حذفه باستخدام "id"
-
+          const { data, error } = await supabase.from("medicines").delete().eq("id", id);
           if (error) throw error;
-
-          alert("تم إزالة الدواء بنجاح!");
-
-          // تحديث النتائج بعد الحذف
+          alert("تم إزالة الدواء بنجاح");
           searchDrugs();
         } catch (err) {
-          alert("❌ فشل في إزالة الدواء، حاول مرة أخرى.");
+          alert("حدث خطأ أثناء إزالة الدواء.");
           console.error("خطأ في إزالة الدواء:", err);
         }
       }
-
-      // ✅ فحص الاتصال بـ Supabase
-      async function checkConnection() {
-        try {
-          const { data, error } = await supabase
-            .from("medicines")
-            .select("*")
-            .limit(1);
-          console.log("✅ اتصال Supabase ناجح:", data);
-          if (error) throw error;
-        } catch (err) {
-          console.error("❌ فشل الاتصال بـ Supabase:", err);
-        }
-      }
-
-      checkConnection();
     </script>
   </body>
 </html>
